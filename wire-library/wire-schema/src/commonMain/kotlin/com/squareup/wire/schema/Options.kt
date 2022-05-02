@@ -213,7 +213,7 @@ class Options(
 
   private fun coerceValueForField(context: Field, value: Any): Any {
     return when {
-      context.isRepeated -> value as? List<*> ?: listOf(value)
+      context.isRepeated || context.type!!.isMap -> value as? List<*> ?: listOf(value)
       value is List<*> -> value.single()!!
       else -> value
     }

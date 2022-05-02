@@ -274,4 +274,78 @@ class OptionsTest {
   fun resolveFieldPathDoesntMatch() {
     assertThat(Options.resolveFieldPath("a.b", setOf("c", "d"))).isNull()
   }
+
+  @Test
+  fun fullyQualifiedRepeatedOptionFields() {
+    val schema = buildSchema {
+      add(
+        "a/b/more_options.proto".toPath(),
+        """
+            |syntax = "proto2";
+            |package a.b;
+            |
+            |import "google/protobuf/descriptor.proto";
+            |
+            |extend google.protobuf.MessageOptions {
+            |  optional MoreOptions more_options = 17000;
+            |}
+            |
+            |message MoreOptions {
+            |  extensions 100 to 200;
+            |}
+            """.trimMargin()
+      )
+      add(
+        "a/c/event_more_options.proto".toPath(),
+        """
+            |syntax = "proto2";
+            |package a.c;
+            |
+            |import "a/b/more_options.proto";
+            |
+            |extend a.b.MoreOptions {
+            |  repeated EvenMoreOptions even_more_options = 100;
+            |}
+            |
+            |message EvenMoreOptions {
+            |  optional string string_option = 1;
+            |}
+            """.trimMargin()
+      )
+      add(
+        "a/d/message.proto".toPath(),
+        """
+            |syntax = "proto2";
+            |package a.d;
+            |
+            |import "a/b/more_options.proto";
+            |import "a/c/event_more_options.proto";
+            |
+            |message Message {
+            |  option (a.b.more_options) = {
+            |    [a.c.even_more_options]: [{string_option: "foo"}, {string_option: "bar"}]
+            |  };
+            |}
+            """.trimMargin()
+      )
+    }
+    val moreOptionsType = ProtoType.get("a.b.MoreOptions")
+    val evenMoreOptionsType = ProtoType.get("a.c.EvenMoreOptions")
+    val moreOptions = ProtoMember.get(Options.MESSAGE_OPTIONS, "a.b.more_options")
+    val evenMoreOptions = ProtoMember.get(moreOptionsType, "a.c.even_more_options")
+    val stringOption = ProtoMember.get(evenMoreOptionsType, "string_option")
+    val message = schema.getType("a.d.Message") as MessageType
+
+    assertThat(message.options.map)
+      .isEqualTo(
+        mapOf(
+          moreOptions to mapOf(
+            evenMoreOptions to listOf(
+              mapOf(stringOption to "foo"),
+              mapOf(stringOption to "bar"),
+            )
+          )
+        )
+      )
+  }
 }
